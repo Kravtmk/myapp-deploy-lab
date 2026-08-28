@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: myapp
-          image: ghcr.io/kravtmk/myapp-deploy-lab:latest
+          image: ghcr.io/kravtmk/myapp-deploy-lab:06e8d53fe2dff3a20e57a75512959cb0823acf62
           imagePullPolicy: Always
 
           ports:
