@@ -1,7 +1,9 @@
-name: Build and Push MyApp
+name: Deploy MyApp with Docker Compose
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 env:
   REGISTRY: ghcr.io
@@ -12,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
+      contents: read
       packages: write
 
     steps:
@@ -34,15 +36,22 @@ jobs:
           tags: |
             ghcr.io/kravtmk/myapp-deploy-lab:latest
             ghcr.io/kravtmk/myapp-deploy-lab:${{ github.sha }}
-      - name: Update Kubernetes image tag
-        run: |
-          sed -i "s|image: ghcr.io/kravtmk/myapp-deploy-lab:.*|image: ghcr.io/kravtmk/myapp-deploy-lab:${{ github.sha }}|" k8s/deployment.yaml
 
-      - name: Commit Kubernetes manifest
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Deploy with Docker Compose
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
 
-          git add k8s/deployment.yaml
-          git commit -m "Deploy ${{ github.sha }}" || exit 0
-          git push
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_ed25519 "$SSH_USER@$SSH_HOST" << EOF
+            cd ~/myapp
+            echo "IMAGE_TAG=${{ github.sha }}" > .env
+            docker compose pull
+            docker compose up -d
+          EOF
+          

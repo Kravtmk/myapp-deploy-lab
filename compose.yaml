@@ -1,0 +1,7 @@
+services:
+  myapp:
+    image: ghcr.io/kravtmk/myapp-deploy-lab:latest
+    container_name: myapp
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
