@@ -1,0 +1,257 @@
+# MyApp CI/CD Deployment Lab
+
+A hands-on DevOps project demonstrating different deployment approaches for the same containerized application.
+
+The goal is to understand the complete application delivery lifecycle:
+
+```text
+code → build → artifact → deployment → verification → rollback
+```
+
+## Deployment Paths
+
+### 1. AWS EC2 + Docker Compose ✅
+
+Full CI/CD deployment:
+
+```text
+Developer
+   │
+   │ git push
+   ▼
+GitHub
+   │
+   ▼
+GitHub Actions
+   │
+   ├── Build Docker image
+   ├── Tag image with Git commit SHA
+   └── Push image to GHCR
+   │
+   ▼
+GitHub OIDC
+   │
+   ▼
+AWS IAM Role
+   │
+   ▼
+AWS Systems Manager (SSM)
+   │
+   ▼
+AWS EC2
+   │
+   ▼
+Docker Compose
+   │
+   ▼
+MyApp
+```
+
+The complete deployment cycle was tested:
+
+```text
+v1
+ ↓
+git push
+ ↓
+automatic deployment
+ ↓
+v2
+ ↓
+rollback by image SHA
+ ↓
+v1
+```
+
+### 2. Proxmox + K3s + Argo CD 🚧
+
+The second deployment path uses Kubernetes/GitOps:
+
+```text
+Developer
+   │
+   │ git push
+   ▼
+GitHub Actions
+   │
+   ├── Build Docker image
+   └── Push image to GHCR
+   │
+   ▼
+Git repository
+   │
+   ▼
+Argo CD
+   │
+   ▼
+K3s cluster on Proxmox
+   │
+   ▼
+MyApp
+```
+
+This path is currently being developed and documented.
+
+---
+
+## Tech Stack
+
+- Python
+- Docker
+- Docker Compose
+- GitHub Actions
+- GitHub Container Registry (GHCR)
+- AWS EC2
+- AWS IAM
+- GitHub OIDC
+- AWS Systems Manager
+- Kubernetes / K3s
+- Argo CD
+- Proxmox
+
+## Repository Structure
+
+```text
+.
+├── app.py
+├── Dockerfile
+├── compose.yaml
+├── .github/
+│   └── workflows/
+│       ├── deploy-compose.yml
+│       └── deploy-k3s.yml
+└── k8s/
+    ├── deployment.yaml
+    ├── service.yaml
+    └── ingress.yaml
+```
+
+## AWS Docker Compose CI/CD
+
+### CI — Build and Publish
+
+GitHub Actions:
+
+1. Checks out the repository
+2. Authenticates to GHCR
+3. Builds the Docker image
+4. Tags the image with:
+   - `latest`
+   - Git commit SHA
+5. Pushes the image to GHCR
+
+Example:
+
+```text
+ghcr.io/kravtmk/myapp-deploy-lab:latest
+ghcr.io/kravtmk/myapp-deploy-lab:<git-sha>
+```
+
+### CD — Deploy
+
+GitHub Actions authenticates to AWS using OIDC.
+
+AWS Systems Manager sends the deployment commands to the EC2 instance:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+No SSH connection from the GitHub-hosted runner to EC2 is required.
+
+## Image Versioning
+
+Each deployment uses an exact Git commit SHA:
+
+```env
+IMAGE_TAG=<git-sha>
+```
+
+This creates a direct relationship:
+
+```text
+Git commit
+    ↓
+Docker image
+    ↓
+Deployed version
+```
+
+## Rollback
+
+Rollback uses an already existing Docker image from GHCR.
+
+Example:
+
+```env
+IMAGE_TAG=<previous-git-sha>
+```
+
+Then:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+The previous application version is restored without rebuilding the image.
+
+## Security
+
+The AWS deployment path uses:
+
+- GitHub OIDC instead of long-lived AWS access keys
+- IAM role restricted to the GitHub repository and `main` branch
+- AWS Systems Manager for remote deployment
+- No public SSH access required for GitHub Actions
+- Immutable Git SHA image tags for deployments and rollback
+
+## Verification
+
+Application status can be verified on the deployment host:
+
+```bash
+docker compose ps
+curl http://localhost:8000
+```
+
+Example deployment:
+
+```text
+MyApp Docker v1
+        ↓
+     git push
+        ↓
+MyApp Docker v2
+        ↓
+ rollback by SHA
+        ↓
+MyApp Docker v1
+```
+
+## Engineering Notes
+
+Detailed implementation notes, commands, troubleshooting, and architecture decisions are documented in my **Engineer-Knowledge** repository:
+
+**AWS EC2 + Docker Compose CI/CD:**  
+`Engineer-Knowledge/10.Projects/deploy_CI_CD_AWS_GitHub_Actions_docker-compose/`
+
+A direct GitHub link will be added after the documentation is published.
+
+## Project Goal
+
+This project is not only about making a deployment work.
+
+The goal is to understand how the components connect:
+
+```text
+application
+→ container
+→ registry
+→ CI/CD
+→ authentication
+→ infrastructure
+→ deployment
+→ rollback
+```
