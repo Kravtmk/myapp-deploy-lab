@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -37,21 +38,34 @@ jobs:
             ghcr.io/kravtmk/myapp-deploy-lab:latest
             ghcr.io/kravtmk/myapp-deploy-lab:${{ github.sha }}
 
-      - name: Deploy with Docker Compose
-        env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
-          SSH_USER: ${{ secrets.DEPLOY_USER }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::324711056718:role/GitHub-MyApp-Deploy-Role
+          aws-region: eu-north-1
 
+            - name: Deploy with AWS SSM
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
-          ssh -i ~/.ssh/id_ed25519 "$SSH_USER@$SSH_HOST" << EOF
-            cd ~/myapp
-            echo "IMAGE_TAG=${{ github.sha }}" > .env
-            docker compose pull
-            docker compose up -d
-          EOF
-          
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "i-0e77e02de72638fb3" \
+            --document-name "AWS-RunShellScript" \
+            --parameters '{"commands":[
+              "cd /home/ubuntu/myapp",
+              "echo IMAGE_TAG=${{ github.sha }} > .env",
+              "docker compose pull",
+              "docker compose up -d"
+            ]}' \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+
+          aws ssm wait command-executed \
+            --command-id "$COMMAND_ID" \
+            --instance-id "i-0e77e02de72638fb3"
+            --query '{
+              Status:Status,
+              Output:StandardOutputContent,
+              Error:StandardErrorContent
+            }'
+
